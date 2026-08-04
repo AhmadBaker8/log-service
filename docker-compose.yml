@@ -1,0 +1,35 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: log-service-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: loguser
+      POSTGRES_PASSWORD: logpass
+      POSTGRES_DB: logs
+    ports:
+      # Exposed for local inspection and EXPLAIN ANALYZE during development.
+      # The app does not use this; it reaches Postgres over the compose
+      # network at hostname 'postgres'.
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      # `docker compose up` reports a container as started long before
+      # Postgres is ready to accept connections. pg_isready checks actual
+      # readiness, so dependent services wait for the real thing.
+      test: ["CMD-SHELL", "pg_isready -U loguser -d logs"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 10s
+    deploy:
+      resources:
+        limits:
+          # Mandated by the specification. Enforced here so all local
+          # performance measurements reflect the graded environment.
+          cpus: "1.0"
+          memory: 1024M
+
+volumes:
+  pgdata:
