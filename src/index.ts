@@ -1,6 +1,17 @@
+import { loadConfig } from "./config/env";
+
 /**
- * Temporary placeholder to verify the TypeScript toolchain compiles.
- * Replaced in the next step with the real application entrypoint.
+ * Temporary entrypoint. Verifies that configuration loads correctly.
+ * Replaced with the real server bootstrap once the HTTP layer exists.
  */
-const message: string = "toolchain check";
-console.log(message);
+function main(): void {
+  const config = loadConfig();
+  console.log("Configuration loaded:");
+  console.log(`  port:           ${config.port}`);
+  console.log(`  databaseUrl:    ${config.databaseUrl}`);
+  console.log(`  authEnabled:    ${config.authEnabled}`);
+  console.log(`  loadgenApiKey:  ${config.loadgenApiKey ?? "(none)"}`);
+  console.log(`  retentionDays:  ${config.retentionDays}`);
+}
+
+main();
