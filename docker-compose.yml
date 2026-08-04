@@ -11,7 +11,7 @@ services:
       # Exposed for local inspection and EXPLAIN ANALYZE during development.
       # The app does not use this; it reaches Postgres over the compose
       # network at hostname 'postgres'.
-      - "5432:5432"
+      - "55432:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
