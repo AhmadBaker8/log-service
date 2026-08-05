@@ -1,17 +1,27 @@
 import { loadConfig } from "./config/env";
+import { createPool } from "./db/pool";
+import { runMigrations } from "./db/migrate";
 
 /**
- * Temporary entrypoint. Verifies that configuration loads correctly.
+ * Temporary entrypoint. Loads configuration and applies migrations.
  * Replaced with the real server bootstrap once the HTTP layer exists.
  */
-function main(): void {
+async function main(): Promise<void> {
   const config = loadConfig();
-  console.log("Configuration loaded:");
-  console.log(`  port:           ${config.port}`);
-  console.log(`  databaseUrl:    ${config.databaseUrl}`);
-  console.log(`  authEnabled:    ${config.authEnabled}`);
-  console.log(`  loadgenApiKey:  ${config.loadgenApiKey ?? "(none)"}`);
-  console.log(`  retentionDays:  ${config.retentionDays}`);
+  const pool = createPool(config);
+
+  try {
+    await runMigrations(pool);
+    console.log("Database ready.");
+  } finally {
+    await pool.end();
+  }
 }
 
-main();
+main().catch((err: unknown) => {
+  console.error(err instanceof Error ? err.message : err);
+  // Non-zero exit is how Docker distinguishes a failed start from a
+  // successful one, so a broken schema stops the container rather than
+  // letting it serve traffic against the wrong database.
+  process.exit(1);
+});
