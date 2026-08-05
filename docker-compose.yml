@@ -8,16 +8,13 @@ services:
       POSTGRES_PASSWORD: logpass
       POSTGRES_DB: logs
     ports:
-      # Exposed for local inspection and EXPLAIN ANALYZE during development.
-      # The app does not use this; it reaches Postgres over the compose
-      # network at hostname 'postgres'.
+      # Exposed for local inspection and EXPLAIN ANALYZE during
+      # development. 55432 on the host because a local PostgreSQL
+      # already occupies 5432. The app does not use this path.
       - "55432:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
-      # `docker compose up` reports a container as started long before
-      # Postgres is ready to accept connections. pg_isready checks actual
-      # readiness, so dependent services wait for the real thing.
       test: ["CMD-SHELL", "pg_isready -U loguser -d logs"]
       interval: 5s
       timeout: 3s
@@ -26,10 +23,36 @@ services:
     deploy:
       resources:
         limits:
-          # Mandated by the specification. Enforced here so all local
-          # performance measurements reflect the graded environment.
           cpus: "1.0"
           memory: 1024M
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: log-service-app
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      PORT: 8080
+      # Reaches Postgres by service name over the compose network on the
+      # container port, never the published host port.
+      DATABASE_URL: postgres://loguser:logpass@postgres:5432/logs
+      LOG_LEVEL: info
+      # Optional features stay off, so a bare `docker compose up` yields
+      # the plain unauthenticated service the contract expects.
+      AUTH_ENABLED: "false"
+      RETENTION_DAYS: "30"
+    ports:
+      - "8080:8080"
+    deploy:
+      resources:
+        limits:
+          # Mandated by the specification.
+          cpus: "0.5"
+          memory: 256M
 
 volumes:
   pgdata:
