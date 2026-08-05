@@ -13,7 +13,7 @@ async function main(): Promise<void> {
 
   const repository = new LogRepository(pool);
   const batcher = new IngestionBatcher(repository);
-  const app = buildApp(pool, batcher);
+  const app = buildApp(pool, batcher, repository);
 
   const shutdown = async (signal: string): Promise<void> => {
     app.log.info(`Received ${signal}, shutting down`);
