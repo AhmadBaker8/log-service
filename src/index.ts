@@ -57,6 +57,15 @@ async function main(): Promise<void> {
 }
 
 main().catch((err: unknown) => {
-  console.error(err instanceof Error ? err.message : err);
+  // Walks the cause chain so a wrapped error still reports its root
+  // cause, including Postgres error codes attached further down.
+  let current: unknown = err;
+  while (current instanceof Error) {
+    console.error(current.message);
+    current = current.cause;
+  }
+  if (!(err instanceof Error)) {
+    console.error(err);
+  }
   process.exit(1);
 });

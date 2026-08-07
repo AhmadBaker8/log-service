@@ -10,7 +10,7 @@
     "start": "node dist/index.js",
     "dev": "tsx watch src/index.ts",
     "typecheck": "tsc --noEmit",
-    "lint": "eslint . --ext .ts",
+    "lint": "eslint .",
     "test": "vitest run"
   },
   "engines": {
@@ -21,13 +21,13 @@
     "pg": "^8.22.0"
   },
   "devDependencies": {
+    "@eslint/js": "^10.0.1",
     "@types/node": "^26.1.2",
     "@types/pg": "^8.20.4",
-    "@typescript-eslint/eslint-plugin": "^8.66.0",
-    "@typescript-eslint/parser": "^8.66.0",
     "eslint": "^10.8.0",
     "tsx": "^4.23.5",
     "typescript": "^6.0.3",
+    "typescript-eslint": "^8.66.0",
     "vitest": "^4.1.10"
   }
 }

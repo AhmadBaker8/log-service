@@ -89,7 +89,10 @@ async function applyMigration(client: PoolClient, file: string): Promise<void> {
     console.log(`Applied migration: ${file}`);
   } catch (err) {
     await client.query("ROLLBACK");
-    throw new Error(`Migration failed: ${file}\n${(err as Error).message}`);
+    // cause chains the original error so the Postgres error code,
+    // position, and stack survive. Extracting only .message discards
+    // exactly the detail needed to debug a failed migration.
+    throw new Error(`Migration failed: ${file}`, { cause: err });
   }
 }
 
