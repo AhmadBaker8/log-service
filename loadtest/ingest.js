@@ -61,7 +61,7 @@ function buildBatch(size) {
     logs[i] = {
       // Spread over the last hour so rows are not identical, while
       // staying inside a single daily partition.
-      timestamp: new Date(now - Math.floor(Math.random() * 3600000)).toISOString(),
+      timestamp: new Date(now - Math.floor(Math.random() * 2592000000)).toISOString(),
       level: pick(LEVELS),
       service: pick(SERVICES),
       message: pick(MESSAGES),

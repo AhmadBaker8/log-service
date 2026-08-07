@@ -197,3 +197,92 @@ export function parseLogQuery(raw: Record<string, unknown>): ParseResult<LogQuer
 
   return { ok: true, value: query };
 }
+
+/**
+ * Bucket sizes from the contract, mapped to widths in seconds. The
+ * width is passed as a query parameter, so bucket size never reaches
+ * the SQL string.
+ */
+export const BUCKET_SECONDS = {
+  "1m": 60,
+  "5m": 300,
+  "1h": 3600,
+  "1d": 86400,
+} as const;
+
+export type BucketSize = keyof typeof BUCKET_SECONDS;
+
+/**
+ * group_by names a column, and placeholders cannot substitute
+ * identifiers. An allowlist maps the request value to a constant
+ * defined here, so the identifier reaching the SQL string always
+ * originates in this file rather than in the URL.
+ */
+export const GROUP_BY_COLUMNS = {
+  service: "service",
+  level: "level",
+} as const;
+
+export type GroupByField = keyof typeof GROUP_BY_COLUMNS;
+
+export interface AggregateQuery extends LogFilters {
+  since: Date;
+  until: Date;
+  bucketSeconds: number;
+  groupBy?: GroupByField;
+}
+
+export function parseAggregateQuery(
+  raw: Record<string, unknown>,
+): ParseResult<AggregateQuery> {
+  // Filter parsing is shared with GET /logs, so the two endpoints cannot
+  // diverge in how they interpret service, level, q, or attributes.
+  const base = parseLogQuery(raw);
+  if (!base.ok) return base;
+
+  const { since, until } = base.value;
+
+  if (since === undefined) {
+    return { ok: false, error: "since is required" };
+  }
+  if (until === undefined) {
+    return { ok: false, error: "until is required" };
+  }
+
+  const bucket = raw.bucket;
+  if (typeof bucket !== "string" || bucket.length === 0) {
+    return { ok: false, error: "bucket is required" };
+  }
+  if (!(bucket in BUCKET_SECONDS)) {
+    return {
+      ok: false,
+      error: `invalid bucket: '${bucket}' must be one of 1m, 5m, 1h, 1d`,
+    };
+  }
+
+  let groupBy: GroupByField | undefined;
+  const rawGroupBy = raw.group_by;
+  if (rawGroupBy !== undefined) {
+    if (typeof rawGroupBy !== "string" || !(rawGroupBy in GROUP_BY_COLUMNS)) {
+      return {
+        ok: false,
+        error: `invalid group_by: '${String(rawGroupBy)}' must be one of service, level`,
+      };
+    }
+    groupBy = rawGroupBy as GroupByField;
+  }
+
+  const query: AggregateQuery = {
+    since,
+    until,
+    bucketSeconds: BUCKET_SECONDS[bucket as BucketSize],
+    attributes: base.value.attributes,
+  };
+
+  if (base.value.service !== undefined) query.service = base.value.service;
+  if (base.value.level !== undefined) query.level = base.value.level;
+  if (base.value.q !== undefined) query.q = base.value.q;
+  if (groupBy !== undefined) query.groupBy = groupBy;
+
+  return { ok: true, value: query };
+}

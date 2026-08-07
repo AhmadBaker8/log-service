@@ -1,7 +1,7 @@
 import type { Pool, PoolClient } from "pg";
 import type { ValidLogEntry } from "../types/log";
-import type { LogQuery } from "../services/queryParams";
-
+import type { LogQuery, LogFilters, AggregateQuery } from "../services/queryParams";
+import { GROUP_BY_COLUMNS } from "../services/queryParams";
 /**
  * All SQL for the logs table lives here. HTTP handlers never build
  * queries, and this module knows nothing about requests or responses.
@@ -15,6 +15,12 @@ export interface LogRow {
   service: string;
   message: string;
   attributes: Record<string, string>;
+}
+
+export interface AggregateRow {
+  bucket_start: Date;
+  group_value: string | null;
+  count: string;
 }
 
 export class LogRepository {
@@ -108,7 +114,7 @@ export class LogRepository {
    * identifiers.
    */
   private static buildFilters(
-    query: LogQuery,
+    query: LogFilters & { since?: Date; until?: Date },
     params: unknown[],
   ): string[] {
     const conditions: string[] = [];
@@ -172,6 +178,47 @@ export class LogRepository {
        ${where}
        ORDER BY ts DESC, id DESC
        LIMIT $${params.length}`,
+      params,
+    );
+
+    return result.rows;
+  }
+
+  /**
+   * Buckets are computed by epoch arithmetic rather than date_trunc,
+   * because date_trunc has no five-minute unit and the contract requires
+   * one. Dividing the epoch by the bucket width and multiplying back
+   * handles all four sizes with the width supplied as a parameter.
+   *
+   * Buckets align to absolute epoch boundaries rather than to `since`,
+   * so the same log always falls in the same bucket regardless of the
+   * query window. Aligning to `since` would make results from different
+   * requests incomparable.
+   */
+  async aggregateLogs(query: AggregateQuery): Promise<AggregateRow[]> {
+    const params: unknown[] = [];
+    const conditions = LogRepository.buildFilters(query, params);
+
+    params.push(query.bucketSeconds);
+    const bucketParam = `$${params.length}`;
+    const bucketExpr = `to_timestamp(floor(extract(epoch FROM ts) / ${bucketParam}) * ${bucketParam})`;
+
+    // The identifier comes from a constant in queryParams, selected by
+    // an allowlist. No URL value reaches the SQL string here.
+    const groupColumn =
+      query.groupBy !== undefined ? GROUP_BY_COLUMNS[query.groupBy] : null;
+
+    const groupSelect = groupColumn !== null ? `${groupColumn}::text` : "NULL::text";
+    const groupClause = groupColumn !== null ? `, ${groupColumn}` : "";
+
+    const result = await this.pool.query<AggregateRow>(
+      `SELECT ${bucketExpr} AS bucket_start,
+              ${groupSelect} AS group_value,
+              count(*)::text AS count
+       FROM logs
+       WHERE ${conditions.join(" AND ")}
+       GROUP BY bucket_start${groupClause}
+       ORDER BY bucket_start ASC`,
       params,
     );
 

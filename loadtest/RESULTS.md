@@ -58,3 +58,48 @@ matched exactly. No batch was acknowledged without being committed.
 Sustained throughput against a pre-populated ~1M row table has not yet
 been measured. That is the figure the graded load generator will
 produce, and it is expected to sit below the empty-table number.
+
+## Aggregation performance (1,003,400 rows over 30 days)
+
+Data spread across 30 daily partitions, ~33,400 rows/day.
+
+| Window  | Bucket | Rows scanned | Time   |
+|---------|--------|--------------|--------|
+| 1 day   | 1h     | ~33,000      | 0.032s |
+| 2 days  | 1h     | ~67,000      | 0.081s |
+| 30 days | 1d     | ~1,003,000   | 1.116s |
+| 30 days | 1h     | ~1,003,000   | 1.172s |
+| 30 days | 5m     | ~1,003,000   | 1.428s |
+| 30 days | 1m     | ~1,003,000   | 4.018s |
+
+Realistic windows are 12-30x inside the 1s target. Partition pruning
+limits a 1-day query to a single partition.
+
+The 30-day case exceeds the target. Two costs stack: scanning 1M rows
+(~1.3us/row, unavoidable), and group cardinality. At 1m over 30 days
+the query produces 43,200 buckets x 5 services = 216,000 groups,
+against 3,600 for 1h. That 60x difference explains the jump from 1.17s
+to 4.02s.
+
+Remedy would be pre-aggregated rollup tables. Not implemented: the
+ingestion path is already CPU-saturated at 49.88% of its 0.5 CPU
+allocation, and maintaining rollups on write risks the 15,000 logs/sec
+target. Documented as a known limitation instead.
+
+## Rejected optimisation: PostgreSQL memory settings
+
+shared_buffers 128MB -> 256MB, work_mem 4MB -> 16MB.
+
+| Setting   | shared hit | shared read | temp        | Execution |
+|-----------|------------|-------------|-------------|-----------|
+| Default   | 769        | 17,300      | none        | 1088ms    |
+| Increased | 135        | 17,940      | 2762r/2765w | 1252ms    |
+
+Slower. Large sequential scans use a small ring buffer by design so
+they do not evict the cache, so shared_buffers does not help them. The
+higher work_mem shifted the planner to a strategy that spilled ~22MB to
+temporary files. Reverted.
+
+## Ingestion with data spread over 30 days
+16,701 logs/sec, p95 202ms, 0 failures, writing across 30 partitions.
+Spreading writes over many partitions did not degrade throughput.

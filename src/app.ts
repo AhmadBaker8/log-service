@@ -5,6 +5,7 @@ import { registerLogRoutes } from "./routes/logs";
 import { registerQueryRoutes } from "./routes/queryLogs";
 import type { IngestionBatcher } from "./services/ingestionBatcher";
 import type { LogRepository } from "./repositories/logRepository";
+import { registerAggregateRoutes } from "./routes/aggregate";
 
 export function buildApp(
   pool: Pool,
@@ -19,6 +20,7 @@ export function buildApp(
   registerHealthRoute(app, pool);
   registerLogRoutes(app, batcher);
   registerQueryRoutes(app, repository);
+  registerAggregateRoutes(app, repository);
 
   return app;
 }
