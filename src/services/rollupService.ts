@@ -30,8 +30,8 @@ export interface RollupOptions {
 
 export const DEFAULT_ROLLUP_OPTIONS: RollupOptions = {
   lagSeconds: 360,
-  maxMinutesPerPass: 2880,
-  intervalMs: 10_000,
+  maxMinutesPerPass: 240,
+  intervalMs: 60_000,
 };
 
 export interface RollupResult {
