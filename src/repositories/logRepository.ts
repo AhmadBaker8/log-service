@@ -195,6 +195,114 @@ export class LogRepository {
    * query window. Aligning to `since` would make results from different
    * requests incomparable.
    */
+  /**
+   * Aggregates using pre-computed rollups where possible.
+   *
+   * Rollups store only (bucket, service, level), so a query filtering on
+   * attributes or message text cannot use them: those dimensions were
+   * discarded when the rows were collapsed into counts, and including
+   * them would make the rollup larger than the raw data.
+   *
+   * `watermark` is the timestamp up to which rollups are complete.
+   * Everything below it comes from the summary, everything above from
+   * raw rows. The two ranges are disjoint by construction, so no row is
+   * counted twice and none is missed.
+   */
+  async aggregateWithRollups(
+    query: AggregateQuery,
+    watermark: Date,
+  ): Promise<AggregateRow[]> {
+    const usesRawOnlyFilters =
+      query.q !== undefined || Object.keys(query.attributes).length > 0;
+
+    if (usesRawOnlyFilters) {
+      return this.aggregateLogs(query);
+    }
+
+    const rollupEnd = new Date(Math.min(watermark.getTime(), query.until.getTime()));
+    const needsRollup = rollupEnd > query.since;
+    const needsRaw = query.until > watermark;
+
+    if (!needsRollup) {
+      return this.aggregateLogs(query);
+    }
+
+    const groupColumn =
+      query.groupBy !== undefined ? GROUP_BY_COLUMNS[query.groupBy] : null;
+    const groupSelect = groupColumn !== null ? `${groupColumn}::text` : "NULL::text";
+    const groupClause = groupColumn !== null ? `, ${groupColumn}` : "";
+
+    const params: unknown[] = [];
+
+    const rollupConditions: string[] = [];
+    params.push(query.since);
+    rollupConditions.push(`bucket >= $${params.length}`);
+    params.push(rollupEnd);
+    rollupConditions.push(`bucket < $${params.length}`);
+    if (query.service !== undefined) {
+      params.push(query.service);
+      rollupConditions.push(`service = $${params.length}`);
+    }
+    if (query.level !== undefined) {
+      params.push(query.level);
+      rollupConditions.push(`level = $${params.length}::log_level`);
+    }
+
+    params.push(query.bucketSeconds);
+    const rollupBucketParam = `$${params.length}`;
+
+    // sum(count) rather than count(*): rollup rows already carry a count.
+    let sql = `SELECT to_timestamp(floor(extract(epoch FROM bucket) / ${rollupBucketParam}) * ${rollupBucketParam}) AS bucket_start,
+                      ${groupSelect} AS group_value,
+                      sum(count) AS subtotal
+               FROM log_rollup_1m
+               WHERE ${rollupConditions.join(" AND ")}
+               GROUP BY bucket_start${groupClause}`;
+
+    if (needsRaw) {
+      const rawStart = new Date(Math.max(watermark.getTime(), query.since.getTime()));
+      const rawConditions: string[] = [];
+      params.push(rawStart);
+      rawConditions.push(`ts >= $${params.length}`);
+      params.push(query.until);
+      rawConditions.push(`ts < $${params.length}`);
+      if (query.service !== undefined) {
+        params.push(query.service);
+        rawConditions.push(`service = $${params.length}`);
+      }
+      if (query.level !== undefined) {
+        params.push(query.level);
+        rawConditions.push(`level = $${params.length}::log_level`);
+      }
+
+      params.push(query.bucketSeconds);
+      const rawBucketParam = `$${params.length}`;
+
+      sql += `
+               UNION ALL
+               SELECT to_timestamp(floor(extract(epoch FROM ts) / ${rawBucketParam}) * ${rawBucketParam}) AS bucket_start,
+                      ${groupSelect} AS group_value,
+                      count(*) AS subtotal
+               FROM logs
+               WHERE ${rawConditions.join(" AND ")}
+               GROUP BY bucket_start${groupClause}`;
+    }
+
+    // The two sources can contribute to the same output bucket when the
+    // watermark falls inside one, so subtotals are summed again.
+    const result = await this.pool.query<AggregateRow>(
+      `SELECT bucket_start,
+              group_value,
+              sum(subtotal)::text AS count
+       FROM (${sql}) AS combined
+       GROUP BY bucket_start, group_value
+       ORDER BY bucket_start ASC`,
+      params,
+    );
+
+    return result.rows;
+  }
+
   async aggregateLogs(query: AggregateQuery): Promise<AggregateRow[]> {
     const params: unknown[] = [];
     const conditions = LogRepository.buildFilters(query, params);

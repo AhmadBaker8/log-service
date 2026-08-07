@@ -5,6 +5,7 @@ import { buildApp } from "./app";
 import { LogRepository } from "./repositories/logRepository";
 import { IngestionBatcher } from "./services/ingestionBatcher";
 import { RetentionService, DEFAULT_RETENTION_INTERVAL_MS } from "./services/retentionService";
+import { RollupService } from "./services/rollupService";
 
 async function main(): Promise<void> {
   const config = loadConfig();
@@ -16,7 +17,8 @@ async function main(): Promise<void> {
 
   const repository = new LogRepository(pool);
   const batcher = new IngestionBatcher(repository);
-  const app = buildApp(pool, batcher, repository);
+  const rollups = new RollupService(pool);
+  const app = buildApp(pool, batcher, repository, rollups);
 
   const retention = new RetentionService(pool, {
     retentionDays: config.retentionDays,
@@ -34,6 +36,20 @@ async function main(): Promise<void> {
     },
   });
 
+  rollups.start({
+    onComplete: (result) => {
+      if (result !== null && result.rowsWritten > 0) {
+        app.log.info(
+          { rowsWritten: result.rowsWritten, watermark: result.watermark },
+          "Refreshed rollups",
+        );
+      }
+    },
+    onError: (err) => {
+      app.log.error({ err }, "Rollup refresh failed");
+    },
+  });
+
   const shutdown = async (signal: string): Promise<void> => {
     app.log.info(`Received ${signal}, shutting down`);
     try {
@@ -41,6 +57,7 @@ async function main(): Promise<void> {
       // flush what is buffered, then close the pool.
       await app.close();
       retention.stop();
+      rollups.stop();
       await batcher.close();
       await pool.end();
       process.exit(0);
