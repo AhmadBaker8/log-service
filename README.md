@@ -78,23 +78,26 @@ Running the service outside Docker requires a reachable PostgreSQL and
 `DATABASE_URL` set accordingly. See `.env.example`.
 
 ## Architecture
-┌─────────────────────────────────┐
-HTTP ───────────▶│ Routes (src/routes) │
-│ parse, validate, format │
-├─────────────────────────────────┤
-│ Services (src/services) │
-│ validation, batching, rollups, │
-│ retention │
-├─────────────────────────────────┤
-│ Repository (src/repositories) │
-│ all SQL, parameterised │
-└───────────────┬─────────────────┘
-│
-┌───────────────▼─────────────────┐
-│ PostgreSQL │
-│ logs (partitioned by day) │
-│ log_rollup_1m (partitioned) │
-└─────────────────────────────────┘
+
+```text
+                    ┌─────────────────────────────┐
+   HTTP ──────────▶│  Routes          (src/routes)   │
+                    │  parse, validate, format        │
+                    ├──────────────────────────────┤
+                    │  Services        (src/services) │
+                    │  validation, batching, rollups, │
+                    │  retention                      │
+                    ├──────────────────────────────┤
+                    │  Repository (src/repositories)  │
+                    │  all SQL, parameterised         │
+                    └────────────────┬───────────────┘
+                                     │
+                    ┌────────────────▼───────────────┐
+                    │  PostgreSQL                     │
+                    │  logs (partitioned by day)      │
+                    │  log_rollup_1m (partitioned)    │
+                    └──────────────────────────────┘
+```
 
 Route handlers never build SQL, and the repository knows nothing about
 HTTP. Validation and query-parameter parsing are pure functions over
