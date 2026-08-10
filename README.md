@@ -105,23 +105,27 @@ plain objects, which is what allows them to be unit tested without a
 database or a running server.
 
 ### Layout
+
+```text
 src/
-├── config/env.ts typed environment loading
+├── config/env.ts              typed environment loading
 ├── db/
-│ ├── pool.ts connection pool
-│ └── migrate.ts migration runner
-├── routes/ HTTP handlers
+│   ├── pool.ts                connection pool
+│   └── migrate.ts             migration runner
+├── routes/                    HTTP handlers
 ├── services/
-│ ├── validation.ts per-entry validation
-│ ├── queryParams.ts query-string parsing
-│ ├── ingestionBatcher.ts request coalescing
-│ ├── rollupService.ts pre-aggregation
-│ └── retentionService.ts partition maintenance
-├── repositories/ SQL
-└── types/ shared interfaces
-migrations/ numbered .sql files
-loadtest/ k6 scripts and results
-scripts/contract-test.sh API contract verification
+│   ├── validation.ts          per-entry validation
+│   ├── queryParams.ts         query-string parsing
+│   ├── ingestionBatcher.ts    request coalescing
+│   ├── rollupService.ts       pre-aggregation
+│   └── retentionService.ts    partition maintenance
+├── repositories/              SQL
+└── types/                     shared interfaces
+migrations/                    numbered .sql files
+loadtest/                      k6 scripts and results
+scripts/contract-test.sh       API contract verification
+```
+
 ## API
 
 ### `GET /health`
