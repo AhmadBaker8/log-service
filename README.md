@@ -13,6 +13,7 @@ truth for both reads and writes.
 
 ```bash
 docker compose up
+
 ```
 
 That is the entire setup. No environment file, no arguments, no manual
@@ -24,6 +25,7 @@ Verify it is running:
 ```bash
 curl localhost:8080/health
 # {"status":"ok"}
+
 ```
 
 Send a log:
@@ -39,12 +41,14 @@ curl -X POST localhost:8080/logs \
         "attributes":{"user_id":"42","region":"eu-west"}
       }]}'
 # {"accepted":1,"rejected":[]}
+
 ```
 
 Query it back:
 
 ```bash
 curl "localhost:8080/logs?service=checkout&level=error&limit=10"
+
 ```
 
 ### Requirements
@@ -72,6 +76,7 @@ npm run build      # compile TypeScript
 npm test           # unit tests
 npm run lint
 npm run typecheck
+
 ```
 
 Running the service outside Docker requires a reachable PostgreSQL and
@@ -97,6 +102,7 @@ Running the service outside Docker requires a reachable PostgreSQL and
                     │  logs (partitioned by day)      │
                     │  log_rollup_1m (partitioned)    │
                     └──────────────────────────────┘
+
 ```
 
 Route handlers never build SQL, and the repository knows nothing about
@@ -124,6 +130,7 @@ src/
 migrations/                    numbered .sql files
 loadtest/                      k6 scripts and results
 scripts/contract-test.sh       API contract verification
+
 ```
 
 ## API
@@ -137,6 +144,7 @@ against an unmigrated database.
 Connectivity is checked on every call rather than cached at startup, so
 the endpoint reports 503 if PostgreSQL becomes unreachable later rather
 than continuing to claim health.
+
 ### `POST /logs`
 
 Ingests a batch. A batch of one is valid.
@@ -153,6 +161,7 @@ Ingests a batch. A batch of one is valid.
     }
   ]
 }
+
 ```
 
 **Validation**
@@ -182,6 +191,7 @@ index in the input array.
 
 ```json
 { "accepted": 9, "rejected": [{ "index": 3, "reason": "invalid level: 'critical'" }] }
+
 ```
 
 - `200` when at least one entry is accepted
@@ -225,6 +235,7 @@ rows.
   ],
   "next_cursor": "eyJ0cyI6..."
 }
+
 ```
 
 `next_cursor` is `null` when no further results exist.
@@ -259,6 +270,7 @@ whole table.
     { "start": "2026-08-09T14:00:00Z", "group": "auth", "count": 42 }
   ]
 }
+
 ```
 
 Buckets are ordered ascending by start time. Empty buckets are omitted.
@@ -268,6 +280,7 @@ Buckets align to absolute epoch boundaries rather than to `since`, so a
 given log falls in the same bucket regardless of the query window.
 Aligning to `since` would shift boundaries per request and make results
 from different queries incomparable.\n
+
 ## Schema design
 
 The schema follows from the access patterns. Every query in the contract
@@ -289,6 +302,7 @@ CREATE TABLE logs (
     attributes JSONB       NOT NULL DEFAULT '{}'::jsonb,
     PRIMARY KEY (ts, id)
 ) PARTITION BY RANGE (ts);
+
 ```
 
 **Daily range partitioning.** This is the decision the rest of the design
@@ -314,6 +328,7 @@ WHERE ts >= now() - interval '1 hour' AND ts < now();
          Subplans Removed: 37
          ->  Bitmap Heap Scan on logs_2026_08_05
                ->  Bitmap Index Scan on logs_2026_08_05_pkey
+
 ```
 
 The same query without `until` prunes far less, because an open-ended
@@ -407,6 +422,7 @@ single indexable containment check:
 
 ```sql
 attributes @> '{"user_id":"42","region":"eu-west"}'::jsonb
+
 ```
 
 One condition covers any number of attribute filters, and the attribute
@@ -464,6 +480,7 @@ CREATE TABLE log_rollup_1m (
     count    BIGINT      NOT NULL,
     PRIMARY KEY (bucket, service, level)
 ) PARTITION BY RANGE (bucket);
+
 ```
 
 One minute is the finest bucket the contract defines, and 5m, 1h, and 1d
