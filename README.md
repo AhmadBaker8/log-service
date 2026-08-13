@@ -304,14 +304,18 @@ traffic.
 
 Partition pruning then makes time-bounded queries cheap. A one-hour
 aggregation eliminates 37 of 38 partitions before reading a row:
+
+```text
 EXPLAIN SELECT count(*) FROM logs
 WHERE ts >= now() - interval '1 hour' AND ts < now();
 
-Aggregate
--> Append
-Subplans Removed: 37
--> Bitmap Heap Scan on logs_2026_08_05
--> Bitmap Index Scan on logs_2026_08_05_pkey
+ Aggregate
+   ->  Append
+         Subplans Removed: 37
+         ->  Bitmap Heap Scan on logs_2026_08_05
+               ->  Bitmap Index Scan on logs_2026_08_05_pkey
+```
+
 The same query without `until` prunes far less, because an open-ended
 range cannot be bounded at the upper end. That is why the contract makes
 both bounds required on `/logs/aggregate`, and it is a performance
