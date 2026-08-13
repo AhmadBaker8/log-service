@@ -45,6 +45,9 @@ services:
       # the plain unauthenticated service the contract expects.
       AUTH_ENABLED: "false"
       RETENTION_DAYS: "30"
+      # Experiment: measuring the cost of background pre-aggregation
+      # on the grading environment, whose storage is markedly slower.
+      ROLLUP_ENABLED: "false"
     ports:
       - "8080:8080"
     deploy:
