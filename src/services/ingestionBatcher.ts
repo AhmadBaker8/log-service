@@ -26,12 +26,6 @@ export interface BatcherOptions {
   intervalMs: number;
 }
 
-/**
- * Concurrent flushes are capped below the pool size so query traffic is
- * never starved of connections.
- */
-const MAX_CONCURRENT_FLUSHES = 2;
-
 export const DEFAULT_BATCHER_OPTIONS: BatcherOptions = {
   /**
    * Postgres caps a statement at 65535 parameters. At five columns per
@@ -65,7 +59,7 @@ export class IngestionBatcher {
   private buffer: PendingWrite[] = [];
   private bufferedRows = 0;
   private timer: NodeJS.Timeout | null = null;
-  private readonly inFlight = new Set<Promise<void>>();
+  private flushing: Promise<void> = Promise.resolve();
   private closed = false;
 
   constructor(
@@ -102,21 +96,6 @@ export class IngestionBatcher {
    * transactions would compete for the same single database CPU, and
    * serialising them keeps the write path predictable.
    */
-  /**
-   * Starts a flush without waiting for earlier ones to finish.
-   *
-   * A single promise chain serialises every transaction onto one
-   * connection, so latency accumulates: with N batches queued, the last
-   * caller waits for all N transactions in sequence. That is invisible
-   * where a flush takes ~15ms, and dominant where it takes ~1s. Running
-   * up to MAX_CONCURRENT_FLUSHES at once uses the pool as intended and
-   * bounds the wait to roughly one transaction rather than the queue.
-   *
-   * The bound matters: unlimited concurrent transactions on a
-   * single-CPU database add context switching rather than throughput,
-   * which was measured earlier when raising the pool size from 8 to 20
-   * cost 20% of ingestion.
-   */
   private scheduleFlush(): void {
     if (this.timer !== null) {
       clearTimeout(this.timer);
@@ -124,24 +103,11 @@ export class IngestionBatcher {
     }
     if (this.buffer.length === 0) return;
 
-    // Back off when the pool is already fully occupied, so the buffer
-    // keeps accumulating into larger batches instead of queueing more
-    // transactions than the database can run.
-    if (this.inFlight.size >= MAX_CONCURRENT_FLUSHES) {
-      if (this.timer === null) {
-        this.timer = setTimeout(() => this.scheduleFlush(), this.options.intervalMs);
-      }
-      return;
-    }
-
     const batch = this.buffer;
     this.buffer = [];
     this.bufferedRows = 0;
 
-    const pending = this.flush(batch).finally(() => {
-      this.inFlight.delete(pending);
-    });
-    this.inFlight.add(pending);
+    this.flushing = this.flushing.then(() => this.flush(batch));
   }
 
   private async flush(batch: PendingWrite[]): Promise<void> {
@@ -163,6 +129,6 @@ export class IngestionBatcher {
   async close(): Promise<void> {
     this.closed = true;
     this.scheduleFlush();
-    await Promise.allSettled([...this.inFlight]);
+    await this.flushing;
   }
 }
