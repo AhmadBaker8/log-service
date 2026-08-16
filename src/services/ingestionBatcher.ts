@@ -34,25 +34,11 @@ export const DEFAULT_BATCHER_OPTIONS: BatcherOptions = {
    */
   maxRows: 2000,
   /**
-   * The floor on request latency, and therefore a ceiling on
-   * timer-driven throughput. When the buffer does not reach maxRows,
-   * every flush waits for this timer, so throughput cannot exceed
-   * (1000 / intervalMs) flushes per second times the buffer depth,
-   * however fast the database is.
-   *
-   * Measured with 33-entry batches at 20 and 150 concurrent requests,
-   * resetting the database volume before every run:
-   *
-   *   100ms   5,002 logs/s at 20 VUs (median 130ms), 19,500 at 150
-   *    20ms  13,486 logs/s at 20 VUs (median  42ms), 16,149 at 150
-   *    10ms  17,978 logs/s at 20 VUs (median  31ms), 17,871 at 150
-   *     5ms  15,089 logs/s at 20 VUs (median  34ms), 12,029 at 150
-   *
-   * At 100ms no request completed faster than 118ms, which is the timer
-   * rather than database time. Below 10ms the flush rate exceeds what
-   * serialised transactions sustain and both regimes degrade.
+   * Only matters under light load, when the buffer never fills. The
+   * contract allows 20 seconds before data must be queryable, so this
+   * is far inside budget and costs nothing at high throughput.
    */
-  intervalMs: 10,
+  intervalMs: 100,
 };
 
 export class IngestionBatcher {
