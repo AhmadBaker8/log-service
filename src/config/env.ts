@@ -13,7 +13,6 @@ export interface AppConfig {
   authEnabled: boolean;
   loadgenApiKey: string | null;
   retentionDays: number;
-  rollupEnabled: boolean;
 }
 
 /**
@@ -57,9 +56,5 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     // handle one case instead of three.
     loadgenApiKey: apiKey !== undefined && apiKey.length > 0 ? apiKey : null,
     retentionDays: parsePositiveInt(env.RETENTION_DAYS, 30, "RETENTION_DAYS"),
-    // Pre-aggregation is background work on the database. It is
-    // configurable so its cost can be measured against environments with
-    // different storage characteristics.
-    rollupEnabled: parseBoolean(env.ROLLUP_ENABLED, true),
   };
 }

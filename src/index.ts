@@ -36,26 +36,19 @@ async function main(): Promise<void> {
     },
   });
 
-  // Pre-aggregation is background work on the database. It is
-  // configurable so its cost can be measured separately in environments
-  // with different storage characteristics.
-  if (config.rollupEnabled) {
-    rollups.start({
-      onComplete: (result) => {
-        if (result !== null && result.rowsWritten > 0) {
-          app.log.info(
-            { rowsWritten: result.rowsWritten, watermark: result.watermark },
-            "Refreshed rollups",
-          );
-        }
-      },
-      onError: (err) => {
-        app.log.error({ err }, "Rollup refresh failed");
-      },
-    });
-  } else {
-    app.log.info("Rollup maintenance disabled by configuration");
-  }
+  rollups.start({
+    onComplete: (result) => {
+      if (result !== null && result.rowsWritten > 0) {
+        app.log.info(
+          { rowsWritten: result.rowsWritten, watermark: result.watermark },
+          "Refreshed rollups",
+        );
+      }
+    },
+    onError: (err) => {
+      app.log.error({ err }, "Rollup refresh failed");
+    },
+  });
 
   const shutdown = async (signal: string): Promise<void> => {
     app.log.info(`Received ${signal}, shutting down`);
